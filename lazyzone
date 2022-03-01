@@ -1,0 +1,110 @@
+#!/bin/awk -f
+
+# lazyzone - simplify writing forward and reverse dns zone-files
+# Copyright (c) 2022 s-k2
+# 
+# This program is free software: you can redistribute it and/or modify  
+# it under the terms of the GNU General Public License as published by  
+# the Free Software Foundation, version 3.
+# 
+# This program is distributed in the hope that it will be useful, but 
+# WITHOUT ANY WARRANTY; without even the implied warranty of 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
+# General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License 
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+BEGIN {
+        dns_server = dns_server ? dns_server : "todo.dns.server"
+        mail = mail ? mail : "todo.dns.mail"
+        ttl = ttl ? ttl : "1d"
+        serial = serial ? serial : systime()
+        refresh = refresh ? refresh : 21600
+        retry = retry ? retry : 3600
+        expire = expire ? expire : 604800
+        minimum_ttl = minimum_ttl ? minimum_ttl : 86400
+        if(reverse_prefix) {
+                reverse = reverse = "true"
+                reverse_domain = domain
+                split(reverse_prefix, reverse_prefix_fields, /\./)
+                domain = ""
+                for(i = length(reverse_prefix_fields); i >= 1; i--) {
+                        domain = domain reverse_prefix_fields[i] "."
+                }
+                domain = domain "in-addr.arpa"
+        } else {
+                reverse = "false"
+        }
+
+        print "$ORIGIN " domain "."
+        print "$TTL " ttl
+        print ""
+        print "@                  IN  SOA     " dns_server ". " mail ". ("
+        print "                                 " serial "  ; serial"
+        print "                                 " refresh "       ; refresh after 6 hours"
+        print "                                 " retry "        ; retry after 1 hour"
+        print "                                 " expire "      ; expire after 1 week"
+        print "                                 " minimum_ttl " )     ; minimum TTL of 1 day"
+        print ""
+        print "                   IN  NS      " dns_server "."
+        print ""
+}
+
+
+function format_forward(name, ip) {
+        if(match(name, /\[([a-z0-9-]+.)\]/)) {
+                alias = name
+                sub(/\[([a-z0-9-]+.)\]/, "", alias)
+                gsub(/[\[\]]/, "", name)
+                printf "%-18s IN  CNAME  %s\n", alias, name
+        }
+        printf "%-18s IN  A      %s\n", name, ip
+}
+
+function format_reverse(name, ip) {
+        gsub(/[\[\]]/, "", name)
+        if(index(ip, reverse_prefix) == 1 && !(ip in ips_having_ptr)) {
+                ips_having_ptr[ip] = name
+                split(ip, ip_fields, /\./)
+                printf "%-18s IN  PTR    %s.%s.\n", ip_fields[length(ip_fields)], name, reverse_domain
+        }
+}
+
+function format_entry(name, ip) {
+        if(reverse == "true")
+                format_reverse(name, ip)
+        else
+                format_forward(name, ip)
+}
+
+/^[a-z0-9.\[\]-]+[[:space:]]+[0-9.]+[[:space:]]*(#.*)?$/ {
+        format_entry($1, $2)
+        next
+}
+
+/^[a-z0-9.\[\]-]+[[:space:]]+[0-9.]+-[0-9]+[[:space:]]*(#.*)?$/ {
+        split($2, ip_fields, /[-.]/)
+        ip_base = ""
+        for(i = 1; i < length(ip_fields) - 1; i++) {
+                ip_base = ip_base ip_fields[i] "."
+        }
+        start = ip_fields[length(ip_fields) - 1]
+        end = ip_fields[length(ip_fields)]
+
+        for(i = start; i <= end; i++) {
+                format_entry($1 (i - start + 1), ip_base i)
+        }
+        next
+ }
+
+ # ignore emtpy lines and comments
+/^[[:space:]]*(#.+)?$/ {
+        next
+}
+
+# and print and error for everything else
+{
+        printf "%s:%d malformed line: '%s'\n", FILENAME, NR, $0 | "cat 1>&2"
+        exit 1
+}
