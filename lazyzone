@@ -62,12 +62,16 @@ function format_forward(name, ip) {
         printf "%-18s IN  A      %s\n", name, ip
 }
 
-function format_reverse(name, ip) {
+function format_reverse(name, ip, i) {
         gsub(/[\[\]]/, "", name)
         if(index(ip, reverse_prefix) == 1 && !(ip in ips_having_ptr)) {
                 ips_having_ptr[ip] = name
                 split(ip, ip_fields, /\./)
-                printf "%-18s IN  PTR    %s.%s.\n", ip_fields[length(ip_fields)], name, reverse_domain
+                ptr_domain = ""
+                for(i = length(ip_fields); i > length(reverse_prefix_fields); i--) {
+                    ptr_domain = ptr_domain "." ip_fields[i]
+                }
+                printf "%-18s IN  PTR    %s.%s.\n", substr(ptr_domain, 2), name, reverse_domain
         }
 }
 
