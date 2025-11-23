@@ -1,9 +1,0 @@
-Package: lazyzone
-Version: 0.1.0
-Section: admin
-Priority: optional
-Architecture: all
-Installed-Size: 4
-Depends: mawk | gawk
-Maintainer: Stefan Klein <s-k2@caipora.net>
-Description: simplify writing forward and reverse dns zone-files
